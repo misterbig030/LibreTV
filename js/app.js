@@ -729,9 +729,12 @@ async function search() {
         }
 
         // 按名称去重，每个节目只保留一个结果（不同来源的同名节目通过换源功能处理）
+        // 规范化后比较：去除所有空白，统一全角/半角，忽略大小写
+        const normalizeTitle = t => (t || '').replace(/\s+/g, '').toLowerCase()
+            .replace(/[！]/g, '!').replace(/[？]/g, '?').replace(/[：]/g, ':');
         const seenNames = new Set();
         allResults = allResults.filter(item => {
-            const key = (item.vod_name || '').trim();
+            const key = normalizeTitle(item.vod_name);
             if (seenNames.has(key)) return false;
             seenNames.add(key);
             return true;
