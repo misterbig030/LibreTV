@@ -164,12 +164,18 @@ async function fetchContentWithType(targetUrl, requestHeaders) {
             throw err; // 抛出错误
         }
 
-        // 读取响应内容
-        const content = await response.text();
         const contentType = response.headers.get('content-type') || '';
+        // Binary types (images, video, audio) must be read as raw bytes, not decoded as UTF-8 text.
+        const isBinary = /^image\/|^video\/|^audio\/|application\/octet-stream/.test(contentType);
+        let content;
+        if (isBinary) {
+            const arrayBuffer = await response.arrayBuffer();
+            content = Buffer.from(arrayBuffer);
+        } else {
+            content = await response.text();
+        }
         logDebug(`请求成功: ${targetUrl}, Content-Type: ${contentType}, 内容长度: ${content.length}`);
-        // 返回结果
-        return { content, contentType, responseHeaders: response.headers };
+        return { content, contentType, responseHeaders: response.headers, isBinary };
 
     } catch (error) {
         // 捕获 fetch 本身的错误（网络、超时等）或上面抛出的 HTTP 错误
