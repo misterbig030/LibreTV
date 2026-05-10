@@ -728,6 +728,20 @@ async function search() {
             });
         }
 
+        // 按名称去重，每个节目只保留一个结果（不同来源的同名节目通过换源功能处理）
+        const seenNames = new Set();
+        allResults = allResults.filter(item => {
+            const key = (item.vod_name || '').trim();
+            if (seenNames.has(key)) return false;
+            seenNames.add(key);
+            return true;
+        });
+
+        // 更新去重后的结果计数
+        if (searchResultsCount) {
+            searchResultsCount.textContent = allResults.length;
+        }
+
         // 添加XSS保护，使用textContent和属性转义
         const safeResults = allResults.map(item => {
             const safeId = item.vod_id ? item.vod_id.toString().replace(/[^\w-]/g, '') : '';

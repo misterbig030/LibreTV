@@ -178,14 +178,16 @@ app.get('/proxy/:encodedUrl', async (req, res) => {
     
     const makeRequest = async () => {
       try {
+        const reqHeaders = { 'User-Agent': config.userAgent };
+        if (/douban\.com|doubanio\.com/.test(targetUrl)) {
+          reqHeaders['Referer'] = 'https://www.douban.com/';
+        }
         return await axios({
           method: 'get',
           url: targetUrl,
           responseType: 'stream',
           timeout: config.timeout,
-          headers: {
-            'User-Agent': config.userAgent
-          }
+          headers: reqHeaders
         });
       } catch (error) {
         if (retries < maxRetries) {

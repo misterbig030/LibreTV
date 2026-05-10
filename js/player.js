@@ -1489,7 +1489,7 @@ function renderResourceInfoBar() {
 async function testVideoSourceSpeed(sourceKey, vodId) {
     try {
         const startTime = performance.now();
-        
+
         // 构建API参数
         let apiParams = '';
         if (sourceKey.startsWith('custom_')) {
@@ -1522,9 +1522,10 @@ async function testVideoSourceSpeed(sourceKey, vodId) {
         }
         
         const data = await response.json();
-        
+
         if (!data.episodes || data.episodes.length === 0) {
-            return { speed: -1, error: '无播放源' };
+            const isTimeout = data.code === 400 && data.msg && data.msg.includes('aborted');
+            return { speed: -1, error: isTimeout ? '超时' : '无播放源' };
         }
         
         // 测试第一个播放链接的响应速度
@@ -1533,33 +1534,34 @@ async function testVideoSourceSpeed(sourceKey, vodId) {
             return { speed: -1, error: '链接无效' };
         }
         
-        // 测试视频链接响应时间
-        const videoTestStart = performance.now();
+        // 通过代理测试视频链接，获取真实 HTTP 状态码
         try {
-            const videoResponse = await fetch(firstEpisodeUrl, {
-                method: 'HEAD',
-                mode: 'no-cors',
+            const proxiedUrl = `/proxy/${encodeURIComponent(firstEpisodeUrl)}`;
+            const authedUrl = await window.ProxyAuth.addAuthToProxyUrl(proxiedUrl);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const videoResponse = await fetch(authedUrl, {
                 cache: 'no-cache',
-                signal: AbortSignal.timeout(5000) // 5秒超时
+                signal: controller.signal
             });
-            
-            const videoTestEnd = performance.now();
-            const totalTime = videoTestEnd - startTime;
-            
-            // 返回总响应时间（毫秒）
-            return { 
+            clearTimeout(timeoutId);
+            controller.abort(); // 取消响应体下载，只需要响应头
+            const totalTime = performance.now() - startTime;
+            return {
                 speed: Math.round(totalTime),
+                reachable: videoResponse.ok,
+                status: videoResponse.status,
                 episodes: data.episodes.length,
-                error: null 
+                error: null
             };
         } catch (videoError) {
-            // 如果视频链接测试失败，只返回API响应时间
             const apiTime = performance.now() - startTime;
-            return { 
+            return {
                 speed: Math.round(apiTime),
+                reachable: false,
+                status: null,
                 episodes: data.episodes.length,
-                error: null,
-                note: 'API响应' 
+                error: videoError.name === 'AbortError' ? '超时' : '无法连接'
             };
         }
         
@@ -1576,7 +1578,12 @@ function formatSpeedDisplay(speedResult) {
     if (speedResult.speed === -1) {
         return `<span class="speed-indicator error">❌ ${speedResult.error}</span>`;
     }
-    
+
+    if (speedResult.reachable === false) {
+        const label = speedResult.status ? `${speedResult.status}` : (speedResult.error || '不可用');
+        return `<span class="speed-indicator error">❌ ${label}</span>`;
+    }
+
     const speed = speedResult.speed;
     let className = 'speed-indicator good';
     let icon = '🟢';
@@ -1636,13 +1643,16 @@ async function showSwitchResourceModal() {
     // 更新状态显示：开始速率测试
     modalContent.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;grid-column:1/-1;">正在测试各资源速率...</div>';
 
-    // 同时测试所有资源的速率
+    // 限制并发数，避免同时发起过多请求导致超时
     const speedResults = {};
-    await Promise.all(Object.entries(allResults).map(async ([sourceKey, result]) => {
-        if (result) {
+    const allEntries = Object.entries(allResults).filter(([, result]) => result);
+    const CONCURRENCY = 2;
+    for (let i = 0; i < allEntries.length; i += CONCURRENCY) {
+        const batch = allEntries.slice(i, i + CONCURRENCY);
+        await Promise.all(batch.map(async ([sourceKey, result]) => {
             speedResults[sourceKey] = await testVideoSourceSpeed(sourceKey, result.vod_id);
-        }
-    }));
+        }));
+    }
 
     // 对结果进行排序
     const sortedResults = Object.entries(allResults).sort(([keyA, resultA], [keyB, resultB]) => {
@@ -1674,9 +1684,10 @@ async function showSwitchResourceModal() {
         const isCurrentSource = String(sourceKey) === String(currentSourceCode) && String(result.vod_id) === String(currentVideoId);
         const sourceName = resourceOptions.find(opt => opt.key === sourceKey)?.name || '未知资源';
         const speedResult = speedResults[sourceKey] || { speed: -1, error: '未测试' };
-        
+        const isBroken = !isCurrentSource && speedResult.reachable === false;
+
         html += `
-            <div class="relative group ${isCurrentSource ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105 transition-transform'}" 
+            <div class="relative group ${isCurrentSource ? 'opacity-50 cursor-not-allowed' : `cursor-pointer hover:scale-105 transition-transform${isBroken ? ' opacity-50' : ''}`}"
                  ${!isCurrentSource ? `onclick="switchToResource('${sourceKey}', '${result.vod_id}')"` : ''}>
                 <div class="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 relative">
                     <img src="${result.vod_pic}" 
