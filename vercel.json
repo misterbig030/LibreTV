@@ -5,16 +5,24 @@
       "destination": "/api/proxy/:path*"
     },
     {
+      "source": "/",
+      "destination": "/api/page"
+    },
+    {
+      "source": "/index.html",
+      "destination": "/api/page"
+    },
+    {
       "source": "/s=:query",
-      "destination": "/index.html"
+      "destination": "/api/page"
     },
     {
       "source": "/player.html",
-      "destination": "/player.html"
+      "destination": "/api/page"
     },
     {
       "source": "/player.html/:path*",
-      "destination": "/player.html"
+      "destination": "/api/page"
     },
     {
       "source": "/:path*",
