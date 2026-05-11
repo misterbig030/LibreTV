@@ -180,8 +180,10 @@ async function fetchContentWithType(targetUrl, requestHeaders) {
     } catch (error) {
         // 捕获 fetch 本身的错误（网络、超时等）或上面抛出的 HTTP 错误
         logDebug(`请求异常 ${targetUrl}: ${error.message}`);
-        // 重新抛出，确保包含原始错误信息
-        throw new Error(`请求目标 URL 失败 ${targetUrl}: ${error.message}`);
+        // 重新抛出，保留原始状态码以便上层正确转发给客户端
+        const wrappedError = new Error(`请求目标 URL 失败 ${targetUrl}: ${error.message}`);
+        if (error.status) wrappedError.status = error.status;
+        throw wrappedError;
     }
 }
 

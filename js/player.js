@@ -1547,13 +1547,15 @@ async function testVideoSourceSpeed(sourceKey, vodId) {
             clearTimeout(timeoutId);
             controller.abort(); // 取消响应体下载，只需要响应头
             const totalTime = performance.now() - startTime;
-            return {
-                speed: Math.round(totalTime),
-                reachable: videoResponse.ok,
-                status: videoResponse.status,
-                episodes: data.episodes.length,
-                error: null
-            };
+            if (videoResponse.ok) {
+                return { speed: Math.round(totalTime), reachable: true, status: videoResponse.status, episodes: data.episodes.length, error: null };
+            } else if (videoResponse.status >= 500) {
+                // 5xx = proxy or upstream server error; detail API returned episodes so source is reachable
+                return { speed: Math.round(totalTime), reachable: true, status: null, episodes: data.episodes.length, note: 'API可达', error: null };
+            } else {
+                // 4xx = access denied / not found — genuinely broken
+                return { speed: Math.round(totalTime), reachable: false, status: videoResponse.status, episodes: data.episodes.length, error: null };
+            }
         } catch (videoError) {
             const apiTime = performance.now() - startTime;
             return {
