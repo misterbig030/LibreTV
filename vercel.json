@@ -23,10 +23,6 @@
     {
       "source": "/player.html/:path*",
       "destination": "/api/page"
-    },
-    {
-      "source": "/:path*",
-      "destination": "/:path*"
     }
   ]
 }
